@@ -31,10 +31,7 @@ class GUI():
         # ADD: display current moisture levels and time since last watering for each plant
         # ADD: predict and display time to next watering
         # ADD: alert message/popup
-        
-    # ADD: function to remove plant and update display
-    def deletePlant(self):
-        print("Delete plant")
+
     
 # Popup window to add a new plant
 class AddPlant(tk.Toplevel):
@@ -68,7 +65,6 @@ class AddPlant(tk.Toplevel):
         tk.Label(self.mainapp.master, text=self.diam.get()).place(x=150, y=yCord)
         tk.Label(self.mainapp.master, text="0").place(x = 175, y = yCord)
         tk.Label(self.mainapp.master, text="0").place(x = 200, y = yCord)
-        tk.Button(self.mainapp.master, text="Delete", command = self.mainapp.deletePlant).place(x = 250, y = yCord)
         
         # Close window
         self.destroy()
@@ -81,6 +77,7 @@ window = GUI(root)
 root.mainloop()
 
 # FIX: While loop doesn't run until GUI closes
+#CHANGE?: Input all plant information first, then start user display
 while True:
     # Check moisture level
     moisture_level = moisture_sensor.read()
