@@ -2,21 +2,26 @@ import pyfirmata, time, tkinter as tk
 from tkinter.font import Font, BOLD
 
 # Connect to board
-board = pyfirmata.Arduino('/dev/cu.usbmodem14401')
-it = pyfirmata.util.Iterator(board)
-it.start()
+#board = pyfirmata.Arduino('/dev/cu.usbmodem14401')
+#it = pyfirmata.util.Iterator(board)
+#it.start()
 
-WATERPUMP = 3
-moisture_sensor = board.get_pin('a:0:i')
-threshold = 0.4
-WATERTIME = 2.0
+#WATERPUMP = 3
+#moisture_sensor = board.get_pin('a:0:i')
+#threshold = 0.4
+#WATERTIME = 2.0
 
-# GUI class
+# GUI class for inputing plant information
 class GUI():
     def __init__(self, master):
         self.master = master
-        master.title("Plant Health Tracker")
+        master.title("Input Plant Information")
+        
+        # Save input data
         self.numPlants = 0
+        self.saveNames = []
+        self.saveTypes = []
+        self.saveDiam = []
         
         # Set window size
         self.master.geometry("500x200")
@@ -26,12 +31,9 @@ class GUI():
         self.button = Font(self.master, underline = 1)
         
         # Display
-        tk.Label(self.master, text="Plant Health Tracker", font = self.header).place(x=5, y=5)
+        tk.Label(self.master, text="Input Plant Information", font = self.header).place(x=5, y=5)
         tk.Button(self.master, text="Add Plant", font = self.button, height = 2, width = 10, command = lambda: AddPlant(self, self.master)).place(x=5, y = 35)
-        # ADD: display current moisture levels and time since last watering for each plant
-        # ADD: predict and display time to next watering
-        # ADD: alert message/popup
-
+        
     
 # Popup window to add a new plant
 class AddPlant(tk.Toplevel):
@@ -40,13 +42,18 @@ class AddPlant(tk.Toplevel):
         self.mainapp = mainapp
         self.title("Add Plant")
         
+        self.plant_category = tk.StringVar(self)
+        self.plant_category.set("Select Category")
+        
+        # List of plant type options
+        plant_category = ["Cacti & Succulents", "Flowering Plants", "Foliage", "Herbs"]
+        
         # Input data
         tk.Label(self, text = "Name: ").grid(row = 0, column = 0)
         self.name = tk.Entry(self)
         self.name.grid(row = 0, column = 1)
-        tk.Label(self, text = "Plant type: ").grid(row = 1, column = 0)
-        self.ptype = tk.Entry(self)
-        self.ptype.grid(row = 1, column = 1)
+        tk.Label(self, text = "Plant category: ").grid(row = 1, column = 0)
+        tk.OptionMenu(self, self.plant_category, *plant_category).grid(row = 1, column = 1)
         tk.Label(self, text = "Pot diameter: ").grid(row = 2, column = 0)
         self.diam = tk.Entry(self)
         self.diam.grid(row = 2, column = 1)
@@ -55,16 +62,17 @@ class AddPlant(tk.Toplevel):
         tk.Button(self, text="Enter", height = 2, width = 10, command = lambda: self.closeandsend()).grid(row = 3, columnspan = 2)
         
     def closeandsend(self):
-        # Update number of plants
+        # Save plant information
         self.mainapp.numPlants = self.mainapp.numPlants + 1
+        self.mainapp.saveNames.append(self.name.get())
+        self.mainapp.saveTypes.append(self.plant_category.get())
+        self.mainapp.saveDiam.append(self.diam.get())
         
-        # Display new plant info
+        # Display plant information
         yCord = (self.mainapp.numPlants * 30) + 50
         tk.Label(self.mainapp.master, text=self.name.get()).place(x=5, y=yCord)
-        tk.Label(self.mainapp.master, text=self.ptype.get()).place(x=100, y=yCord)
-        tk.Label(self.mainapp.master, text=self.diam.get()).place(x=150, y=yCord)
-        tk.Label(self.mainapp.master, text="0").place(x = 175, y = yCord)
-        tk.Label(self.mainapp.master, text="0").place(x = 200, y = yCord)
+        tk.Label(self.mainapp.master, text=self.plant_category.get()).place(x=100, y=yCord)
+        tk.Label(self.mainapp.master, text=self.diam.get()).place(x=250, y=yCord)
         
         # Close window
         self.destroy()
@@ -78,7 +86,7 @@ root.mainloop()
 
 # FIX: While loop doesn't run until GUI closes
 #CHANGE?: Input all plant information first, then start user display
-while True:
+while False:
     # Check moisture level
     moisture_level = moisture_sensor.read()
     print(moisture_level)
