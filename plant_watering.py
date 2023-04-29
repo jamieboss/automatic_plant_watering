@@ -1,51 +1,75 @@
-import pyfirmata, time, tkinter as tk, pandas as pd, numpy as np
+import pyfirmata, time, datetime, tkinter as tk, pandas as pd
 from tkinter.font import Font, BOLD
 from tkinter import ttk
 
-# Connect to board
-#board = pyfirmata.Arduino('/dev/cu.usbmodem14401')
-#it = pyfirmata.util.Iterator(board)
-#it.start()
-
-#WATERPUMP = 3
-#moisture_sensor = board.get_pin('a:0:i')
-#threshold = 0.4
-#WATERTIME = 2.0
-
-# Read plant data
+# Read in plant data
 PLANT_DATA = pd.read_excel('plant_types_and_water.xlsx')
 CS = list(PLANT_DATA[PLANT_DATA['Plant Type'] == "Cacti & Succulents"]['Name'])
 FP = list(PLANT_DATA[PLANT_DATA['Plant Type'] == "Flowering Plants"]['Name'])
 F = list(PLANT_DATA[PLANT_DATA['Plant Type'] == "Foliage Plants"]['Name'])
 H = list(PLANT_DATA[PLANT_DATA['Plant Type'] == "Herbs"]['Name'])
 
+# Calculate threshold values for each plant
+water_levels = ['Minimum demand', 'Low demand', 'Medium demand', 'High demand', 'Very high demand', 'None']
+THRESHOLD = [0.55, 0.4, 0.35, 0.3, 0.25, 0.35]
 
 # GUI class for inputing plant information
 class GUI():
     def __init__(self, master):
         self.master = master
         master.title("Input Plant Information")
+        self.input = False
         
         # Save input data
         self.numPlants = 0
+        self.numPlantsVar = tk.IntVar(self.master, 0)
         self.saveNames = []
         self.saveTypes = []
         self.saveDiams = []
+        self.saveCurrMoisture = []
+        self.saveLastWatered = []
+        self.waterTank = 0
+        self.waterTankVar = tk.StringVar()
+        
+        # Trace variables to enable start button
+        self.numPlantsVar.trace('w', self.enable_button)
+        self.waterTankVar.trace('w', self.enable_button)
         
         # Set window size
-        self.master.geometry("500x200")
+        self.master.geometry("1000x200")
         
         # Define fonts
+        self.title = Font(self.master, size = 20, weight=BOLD)
         self.header = Font(self.master, size = 15, weight=BOLD)
         self.button = Font(self.master, underline = 1)
         
         # Display
-        tk.Label(self.master, text="Input Plant Information", font = self.header).place(x=5, y=5)
+        tk.Label(self.master, text="Plant Health Tracker", font = self.title).place(x=5, y=5)
         tk.Button(self.master, text="Add Plant", font = self.button, height = 2, width = 10, command = lambda: AddPlant(self, self.master)).place(x=5, y = 35)
-        tk.Button(self.master, text="Done", font = self.button, height = 2, width = 10, command = self.end).place(x = 110, y = 35)
+        self.start = tk.Button(self.master, text="Start", font = self.button, height = 2, width = 10, command = self.end)
+        self.start.place(x = 110, y = 35)
+        self.start["state"] = "disabled"
+        tk.Label(self.master, text="Enter Water Tank Capacity (oz): ", font = self.header).place(x = 550, y = 5)
+        tk.Entry(self.master, textvariable=self.waterTankVar).place(x = 800, y = 5)
+        tk.Button(self.master, text='Refill Water', font = self.button, command = self.refill_water).place(x = 800, y = 35)
         
+        # Headers
+        tk.Label(self.master, text="Name", anchor = "w", font = self.header).place(x=5, y=85)
+        tk.Label(self.master, text="Type", anchor = "w", font = self.header).place(x=175, y=85)
+        tk.Label(self.master, text="Pot Diameter", anchor = "w", font = self.header).place(x=375, y=85)
+        tk.Label(self.master, text="Current Moisture", anchor = "w", font = self.header).place(x=525, y=85)
+        tk.Label(self.master, text="Last Watered", anchor = "w", font = self.header).place(x=700, y=85)
+    
+    def enable_button(self, var, index, mode):
+        if self.numPlants > 0 and len(self.waterTankVar.get()) > 0:
+            self.start["state"] = "normal"
+            
+    def refill_water(self, _event=None):
+        self.waterTank = int(self.waterTankVar.get())
+    
     def end(self, _event=None):
-        self.master.destroy() 
+        self.waterTank = int(self.waterTankVar.get())
+        self.input = True
     
 # Popup window to add a new plant
 class AddPlant(tk.Toplevel):
@@ -86,49 +110,88 @@ class AddPlant(tk.Toplevel):
     def closeandsend(self):
         # Save plant information
         self.mainapp.numPlants = self.mainapp.numPlants + 1
+        self.mainapp.numPlantsVar.set(self.mainapp.numPlants)
         self.mainapp.saveNames.append(self.name.get())
         self.mainapp.saveTypes.append(self.plantT.get())
         self.mainapp.saveDiams.append(self.diam.get())
-        
-        # Display plant information
-        yCord = (self.mainapp.numPlants * 30) + 50
-        tk.Label(self.mainapp.master, text=self.name.get()).place(x=5, y=yCord)
-        tk.Label(self.mainapp.master, text=self.plantT.get()).place(x=100, y=yCord)
-        tk.Label(self.mainapp.master, text=self.diam.get()).place(x=250, y=yCord)
+        self.mainapp.saveCurrMoisture.append("0")
+        self.mainapp.saveLastWatered.append(datetime.datetime.now())
+
+        update_display(self.mainapp)
         
         # Close window
         self.destroy()
         
+# Update GUI display
+def update_display(app):
+    for i in range(0, app.numPlants):
+        yCord = (i * 50) + 115
+        tk.Label(app.master, text=app.saveNames[i], anchor = "w", wraplength=100).place(x=5, y=yCord)
+        tk.Label(app.master, text=app.saveTypes[i], anchor = "w", wraplength=100).place(x=175, y=yCord)
+        tk.Label(app.master, text=app.saveDiams[i], anchor = "w", wraplength=100).place(x=375, y=yCord)
+        tk.Label(app.master, text=app.saveCurrMoisture[i] + '%', anchor = "w", wraplength=100).place(x=525, y=yCord)
+        time_dif = datetime.datetime.now() - app.saveLastWatered[i]
+        t = int(time_dif.total_seconds())
+        days = int(t / (24 * 3600))
+        t = t % (24 * 3600)
+        hours = int(t / 3600)
+        t = t % 3600
+        minutes = int(t / 60)
+        tk.Label(app.master, text=str(days) + ' days ' + str(hours) + ' hours ' + str(minutes) + ' minutes ', anchor = "w", wraplength=200).place(x=700, y=yCord)
+        
+def read_and_update(window, i, moisture, time):
+    window.saveCurrMoisture[i] = str(int((moisture / 65) * 100))
+    if time:
+        window.saveLastWatered[i] = datetime.datetime.now()
+    update_display(window)
+        
+# Connect to board
+board = pyfirmata.Arduino('/dev/cu.usbmodem14201')
+it = pyfirmata.util.Iterator(board)
+it.start()
+
+# Define pins
+WATERPUMP = 3
+moisture_sensor = [board.get_pin('a:0:i')]
+
+# Water pumped per second
+OZPERSECOND = 10
+
 # Launch GUI
 root = tk.Tk()
 window = GUI(root)
-root.mainloop()
 
-plant_names = list(window.saveNames)
-plant_types = list(window.saveTypes)
-plant_diams = list(window.saveDiams)
-
-print(plant_names)
-print(plant_types)
-print(plant_diams)
-
-# FIX: While loop doesn't run until GUI closes
-#CHANGE?: Input all plant information first, then start user display
-while False:
-    # Check moisture level
-    moisture_level = moisture_sensor.read()
-    print(moisture_level)
-    # 0 (connected) - 0.66 (disconnected)
-    
-    # Water plant if moisture is too low
-    # ADD: get threshold and water time from AI or something
-    if moisture_level is not None and moisture_level > threshold:
-        board.digital[WATERPUMP].write(1)
-        time.sleep(WATERTIME)
-        board.digital[WATERPUMP].write(0)
+def sensor_readings():
+    if window.input:
+        i = 0
+        # Check moisture level
+        moisture_level = moisture_sensor[i].read()
         
-    # ADD: write moisture level and time since last watering to UI
-    # ADD: check for hardware errors 
-    # ADD: predict next watering time
+        # Water plant if moisture is too low
+        update_time = False
+        threshold = THRESHOLD[water_levels.index(PLANT_DATA[PLANT_DATA['Name'] == window.saveTypes[i]]['Water Level'].astype('str')[1])]
+        if moisture_level is not None and moisture_level > threshold:
+            board.digital[WATERPUMP].write(1)
+            time.sleep(int(window.saveDiams[i]))
+            board.digital[WATERPUMP].write(0)
+            
+            # Update time and water tank
+            update_time = True
+            window.waterTank = window.waterTank - (float(window.saveDiams[i]) * OZPERSECOND)
+        
+        # Check for hardware errors 
+        if moisture_level is None:
+            print('CHECK MOISTURE SENSOR')
+        if window.waterTank < 0:
+            print('REFILL WATER TANK')
     
-    time.sleep(60.0) # Sleep for one minute
+        # Write moisture level and time since last watering to UI
+        read_and_update(window, i, moisture_level, update_time)
+            
+        # ADD: predict next watering time
+        
+    # Sleep for one minute
+    root.after(10000, sensor_readings)
+    
+root.after(10000, sensor_readings)
+root.mainloop()
