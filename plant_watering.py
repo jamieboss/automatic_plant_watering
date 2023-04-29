@@ -1,9 +1,11 @@
+import enum
 import pyfirmata, time, datetime, tkinter as tk, pandas as pd
 from tkinter.font import Font, BOLD
 from tkinter import ttk
-
+from tkinter.messagebox import showerror
 # Read in plant data
 PLANT_DATA = pd.read_excel('plant_types_and_water.xlsx')
+PLANT_DATA = PLANT_DATA.fillna('None')
 CS = list(PLANT_DATA[PLANT_DATA['Plant Type'] == "Cacti & Succulents"]['Name'])
 FP = list(PLANT_DATA[PLANT_DATA['Plant Type'] == "Flowering Plants"]['Name'])
 F = list(PLANT_DATA[PLANT_DATA['Plant Type'] == "Foliage Plants"]['Name'])
@@ -45,7 +47,7 @@ class GUI():
         
         # Display
         tk.Label(self.master, text="Plant Health Tracker", font = self.title).place(x=5, y=5)
-        tk.Button(self.master, text="Add Plant", font = self.button, height = 2, width = 10, command = lambda: AddPlant(self, self.master)).place(x=5, y = 35)
+        tk.Button(self.master, text="Add Plant", font = self.button, height = 2, width = 10, command = lambda: AddPlant(self, self.master), justify="left").place(x=5, y = 35)
         self.start = tk.Button(self.master, text="Start", font = self.button, height = 2, width = 10, command = self.end)
         self.start.place(x = 110, y = 35)
         self.start["state"] = "disabled"
@@ -121,7 +123,25 @@ class AddPlant(tk.Toplevel):
         
         # Close window
         self.destroy()
+
+# Window listing hardware issues
+class IssuesList(tk.Toplevel):
+    def __init__(self, mainapp, master = None):
+        super().__init__(master = master)
+        self.mainapp = mainapp
+        self.title("Active Issues")
+        self.geometry("300x300")
+
+        self.issues_list = []
+
+        tk.Label(self, text="Issues:", font=Font(self.master, size=20, weight=BOLD)).grid(row = 0, column = 0)
         
+        if self.issues_list:
+            tk.Label(self, text="\n".join(self.issues_list), anchor="w", font=Font(self.master, size=14), fg="#f00").grid(row=1, column=0)
+        else:
+            tk.Label(self, text="None", anchor="w", font=Font(self.master, size=14), fg="#0f0", justify="left").grid(row=1, column=0)
+
+
 # Update GUI display
 def update_display(app):
     for i in range(0, app.numPlants):
@@ -138,12 +158,23 @@ def update_display(app):
         t = t % 3600
         minutes = int(t / 60)
         tk.Label(app.master, text=str(days) + ' days ' + str(hours) + ' hours ' + str(minutes) + ' minutes ', anchor = "w", wraplength=200).place(x=700, y=yCord)
-        
-def read_and_update(window, i, moisture, time):
-    window.saveCurrMoisture[i] = str(int((moisture / 65) * 100))
+
+# Update Issues GUI
+def update_issues(app):
+    if app.issues_list:
+        tk.Label(app, text="\n".join(app.issues_list), anchor="w", font=Font(app.master, size=14), fg="#f00").grid(row=1, column=1)
+    else:
+        tk.Label(app, text="None", anchor="w", font=Font(app.master, size=14), fg="#0f0", justify="left").grid(row=1, column=1)
+
+
+def read_and_update(main_window, i, moisture, time, issues_window, issues_list):
+    if moisture:
+        main_window.saveCurrMoisture[i] = str(int((moisture / 65) * 100))
     if time:
-        window.saveLastWatered[i] = datetime.datetime.now()
-    update_display(window)
+        main_window.saveLastWatered[i] = datetime.datetime.now()
+    issues_window.issues_list = issues_list
+    update_display(main_window)
+    update_issues(issues_window)
         
 # Connect to board
 board = pyfirmata.Arduino('/dev/cu.usbmodem14201')
@@ -160,6 +191,7 @@ OZPERSECOND = 10
 # Launch GUI
 root = tk.Tk()
 window = GUI(root)
+issues_window = IssuesList(root)
 
 def sensor_readings():
     if window.input:
@@ -169,7 +201,7 @@ def sensor_readings():
         
         # Water plant if moisture is too low
         update_time = False
-        threshold = THRESHOLD[water_levels.index(PLANT_DATA[PLANT_DATA['Name'] == window.saveTypes[i]]['Water Level'].astype('str')[1])]
+        threshold = THRESHOLD[water_levels.index(PLANT_DATA[PLANT_DATA['Name'] == window.saveTypes[i]]['Water Level'].astype('str').values[0])]
         if moisture_level is not None and moisture_level > threshold:
             board.digital[WATERPUMP].write(1)
             time.sleep(int(window.saveDiams[i]))
@@ -178,20 +210,21 @@ def sensor_readings():
             # Update time and water tank
             update_time = True
             window.waterTank = window.waterTank - (float(window.saveDiams[i]) * OZPERSECOND)
-        
+
+        issues_list = []
         # Check for hardware errors 
         if moisture_level is None:
-            print('CHECK MOISTURE SENSOR')
+            issues_list.append('CHECK MOISTURE SENSOR')
         if window.waterTank < 0:
-            print('REFILL WATER TANK')
+            issues_list.append('REFILL WATER TANK')
     
         # Write moisture level and time since last watering to UI
-        read_and_update(window, i, moisture_level, update_time)
+        read_and_update(window, i, moisture_level, update_time, issues_window, issues_list)
             
         # ADD: predict next watering time
         
     # Sleep for one minute
-    root.after(10000, sensor_readings)
+    root.after(60000, sensor_readings)
     
-root.after(10000, sensor_readings)
+sensor_readings()
 root.mainloop()
