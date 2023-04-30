@@ -1,8 +1,10 @@
 import enum
+import os
+from re import A
 import pyfirmata, time, datetime, tkinter as tk, pandas as pd
 from tkinter.font import Font, BOLD
 from tkinter import ttk
-from tkinter.messagebox import showerror
+
 # Read in plant data
 PLANT_DATA = pd.read_excel('plant_types_and_water.xlsx')
 PLANT_DATA = PLANT_DATA.fillna('None')
@@ -36,7 +38,20 @@ class GUI():
         # Trace variables to enable start button
         self.numPlantsVar.trace('w', self.enable_button)
         self.waterTankVar.trace('w', self.enable_button)
-        
+
+        # Load in plants from file if it exists
+        if os.path.exists("my_plants.txt"):
+            with open("my_plants.txt", "r") as f:
+                for line in f.readlines():
+                    parts = line.strip("\n").split(",")
+                    self.saveNames.append(parts[0])
+                    self.saveTypes.append(parts[1])
+                    self.saveDiams.append(parts[2])
+                    self.saveCurrMoisture.append(parts[3])
+                    self.saveLastWatered.append(datetime.datetime.strptime(parts[4], "%Y-%m-%d %H:%M:%S.%f"))
+                    self.numPlants += 1
+
+        self.numPlantsVar.set(self.numPlants)
         # Set window size
         self.master.geometry("1000x200")
         
@@ -58,10 +73,16 @@ class GUI():
         # Headers
         tk.Label(self.master, text="Name", anchor = "w", font = self.header).place(x=5, y=85)
         tk.Label(self.master, text="Type", anchor = "w", font = self.header).place(x=175, y=85)
-        tk.Label(self.master, text="Pot Diameter", anchor = "w", font = self.header).place(x=375, y=85)
-        tk.Label(self.master, text="Current Moisture", anchor = "w", font = self.header).place(x=525, y=85)
+        tk.Label(self.master, text="Pot Diameter", anchor = "w", font = self.header).place(x=325, y=85)
+        tk.Label(self.master, text="Current Moisture", anchor = "w", font = self.header).place(x=475, y=85)
         tk.Label(self.master, text="Last Watered", anchor = "w", font = self.header).place(x=700, y=85)
-    
+
+        update_display(self)
+    def saveToFile(self):
+        with open("my_plants.txt", "w") as f:
+            for i in range(self.numPlants):
+                f.write(f"{self.saveNames[i]},{self.saveTypes[i]},{self.saveDiams[i]},{self.saveCurrMoisture[i]},{self.saveLastWatered[i]}\n")
+
     def enable_button(self, var, index, mode):
         if self.numPlants > 0 and len(self.waterTankVar.get()) > 0:
             self.start["state"] = "normal"
@@ -121,6 +142,7 @@ class AddPlant(tk.Toplevel):
 
         update_display(self.mainapp)
         
+        self.mainapp.saveToFile()
         # Close window
         self.destroy()
 
@@ -137,7 +159,7 @@ class IssuesList(tk.Toplevel):
         tk.Label(self, text="Issues:", font=Font(self.master, size=20, weight=BOLD)).grid(row = 0, column = 0)
         
         if self.issues_list:
-            tk.Label(self, text="\n".join(self.issues_list), anchor="w", font=Font(self.master, size=14), fg="#f00").grid(row=1, column=0)
+            tk.Label(self, text="\n".join(self.issues_list), anchor="w", font=Font(self.master, size=14), fg="#f00", justify="left").grid(row=1, column=0)
         else:
             tk.Label(self, text="None", anchor="w", font=Font(self.master, size=14), fg="#0f0", justify="left").grid(row=1, column=0)
 
@@ -147,7 +169,7 @@ def update_display(app):
     for i in range(0, app.numPlants):
         yCord = (i * 50) + 115
         tk.Label(app.master, text=app.saveNames[i], anchor = "w", wraplength=100).place(x=5, y=yCord)
-        tk.Label(app.master, text=app.saveTypes[i], anchor = "w", wraplength=100).place(x=175, y=yCord)
+        tk.Label(app.master, text=app.saveTypes[i], anchor = "w", wraplength=100).place(x=150, y=yCord)
         tk.Label(app.master, text=app.saveDiams[i], anchor = "w", wraplength=100).place(x=375, y=yCord)
         tk.Label(app.master, text=app.saveCurrMoisture[i] + '%', anchor = "w", wraplength=100).place(x=525, y=yCord)
         time_dif = datetime.datetime.now() - app.saveLastWatered[i]
@@ -162,9 +184,9 @@ def update_display(app):
 # Update Issues GUI
 def update_issues(app):
     if app.issues_list:
-        tk.Label(app, text="\n".join(app.issues_list), anchor="w", font=Font(app.master, size=14), fg="#f00").grid(row=1, column=1)
+        tk.Label(app, text="\n".join(app.issues_list), anchor="w", font=Font(app.master, size=14), fg="#f00").grid(row=1, column=0)
     else:
-        tk.Label(app, text="None", anchor="w", font=Font(app.master, size=14), fg="#0f0", justify="left").grid(row=1, column=1)
+        tk.Label(app, text="None", anchor="w", font=Font(app.master, size=14), fg="#0f0", justify="left").grid(row=1, column=0)
 
 
 def read_and_update(main_window, i, moisture, time, issues_window, issues_list):
@@ -175,6 +197,7 @@ def read_and_update(main_window, i, moisture, time, issues_window, issues_list):
     issues_window.issues_list = issues_list
     update_display(main_window)
     update_issues(issues_window)
+    main_window.saveToFile()
         
 # Connect to board
 board = pyfirmata.Arduino('/dev/cu.usbmodem14201')
@@ -202,7 +225,7 @@ def sensor_readings():
         # Water plant if moisture is too low
         update_time = False
         threshold = THRESHOLD[water_levels.index(PLANT_DATA[PLANT_DATA['Name'] == window.saveTypes[i]]['Water Level'].astype('str').values[0])]
-        if moisture_level is not None and moisture_level > threshold:
+        if moisture_level is not None and moisture_level > threshold and window.waterTank > 0:
             board.digital[WATERPUMP].write(1)
             time.sleep(int(window.saveDiams[i]))
             board.digital[WATERPUMP].write(0)
@@ -225,6 +248,12 @@ def sensor_readings():
         
     # Sleep for one minute
     root.after(60000, sensor_readings)
-    
+
+def on_closing():
+    window.saveToFile()
+    root.destroy()
+
+root.protocol("WM_DELETE_WINDOW", on_closing)
+
 sensor_readings()
 root.mainloop()
