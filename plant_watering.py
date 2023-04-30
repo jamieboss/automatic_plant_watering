@@ -1,7 +1,4 @@
-import enum
-import os
-from re import A
-import pyfirmata, time, datetime, tkinter as tk, pandas as pd
+import os, pyfirmata, time, datetime, tkinter as tk, pandas as pd
 from tkinter.font import Font, BOLD
 from tkinter import ttk
 
@@ -13,7 +10,7 @@ FP = list(PLANT_DATA[PLANT_DATA['Plant Type'] == "Flowering Plants"]['Name'])
 F = list(PLANT_DATA[PLANT_DATA['Plant Type'] == "Foliage Plants"]['Name'])
 H = list(PLANT_DATA[PLANT_DATA['Plant Type'] == "Herbs"]['Name'])
 
-# Calculate threshold values for each plant
+# Set threshold values for each plant
 water_levels = ['Minimum demand', 'Low demand', 'Medium demand', 'High demand', 'Very high demand', 'None']
 THRESHOLD = [0.55, 0.4, 0.35, 0.3, 0.25, 0.35]
 
@@ -38,20 +35,7 @@ class GUI():
         # Trace variables to enable start button
         self.numPlantsVar.trace('w', self.enable_button)
         self.waterTankVar.trace('w', self.enable_button)
-
-        # Load in plants from file if it exists
-        if os.path.exists("my_plants.txt"):
-            with open("my_plants.txt", "r") as f:
-                for line in f.readlines():
-                    parts = line.strip("\n").split(",")
-                    self.saveNames.append(parts[0])
-                    self.saveTypes.append(parts[1])
-                    self.saveDiams.append(parts[2])
-                    self.saveCurrMoisture.append(parts[3])
-                    self.saveLastWatered.append(datetime.datetime.strptime(parts[4], "%Y-%m-%d %H:%M:%S.%f"))
-                    self.numPlants += 1
-
-        self.numPlantsVar.set(self.numPlants)
+        
         # Set window size
         self.master.geometry("1000x200")
         
@@ -76,8 +60,21 @@ class GUI():
         tk.Label(self.master, text="Pot Diameter", anchor = "w", font = self.header).place(x=325, y=85)
         tk.Label(self.master, text="Current Moisture", anchor = "w", font = self.header).place(x=475, y=85)
         tk.Label(self.master, text="Last Watered", anchor = "w", font = self.header).place(x=700, y=85)
-
-        update_display(self)
+        
+        # Load in plants from file if it exists
+        if os.path.exists("my_plants.txt"):
+            with open("my_plants.txt", "r") as f:
+                for line in f.readlines():
+                    parts = line.strip("\n").split(",")
+                    self.saveNames.append(parts[0])
+                    self.saveTypes.append(parts[1])
+                    self.saveDiams.append(parts[2])
+                    self.saveCurrMoisture.append(parts[3])
+                    self.saveLastWatered.append(datetime.datetime.strptime(parts[4], "%Y-%m-%d %H:%M:%S.%f"))
+                    self.numPlants += 1
+            self.numPlantsVar.set(self.numPlants)
+            update_display(self)
+        
     def saveToFile(self):
         with open("my_plants.txt", "w") as f:
             for i in range(self.numPlants):
@@ -141,8 +138,8 @@ class AddPlant(tk.Toplevel):
         self.mainapp.saveLastWatered.append(datetime.datetime.now())
 
         update_display(self.mainapp)
-        
         self.mainapp.saveToFile()
+        
         # Close window
         self.destroy()
 
@@ -191,7 +188,7 @@ def update_issues(app):
 
 def read_and_update(main_window, i, moisture, time, issues_window, issues_list):
     if moisture:
-        main_window.saveCurrMoisture[i] = str(int((moisture / 65) * 100))
+        main_window.saveCurrMoisture[i] = str(int(100 - (moisture / 0.65) * 100))
     if time:
         main_window.saveLastWatered[i] = datetime.datetime.now()
     issues_window.issues_list = issues_list
@@ -200,7 +197,7 @@ def read_and_update(main_window, i, moisture, time, issues_window, issues_list):
     main_window.saveToFile()
         
 # Connect to board
-board = pyfirmata.Arduino('/dev/cu.usbmodem14201')
+board = pyfirmata.Arduino('/dev/cu.usbmodem14401')
 it = pyfirmata.util.Iterator(board)
 it.start()
 
@@ -209,7 +206,7 @@ WATERPUMP = 3
 moisture_sensor = [board.get_pin('a:0:i')]
 
 # Water pumped per second
-OZPERSECOND = 10
+OZPERSECOND = 0.94
 
 # Launch GUI
 root = tk.Tk()
@@ -243,8 +240,6 @@ def sensor_readings():
     
         # Write moisture level and time since last watering to UI
         read_and_update(window, i, moisture_level, update_time, issues_window, issues_list)
-            
-        # ADD: predict next watering time
         
     # Sleep for one minute
     root.after(60000, sensor_readings)
