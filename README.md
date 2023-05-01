@@ -7,7 +7,8 @@
 The following components are needed:
 
 <li> Arduino Uno
-<li> HiLetgo Soil Moisture Sensors
+<li> HiLetgo Soil Moisture Sensor and Module
+<li> Mini Water Pump, PVC tubing, and Water Tank
 
 ## Software Requirements
 
