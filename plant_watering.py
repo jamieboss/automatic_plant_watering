@@ -15,7 +15,7 @@ H = list(PLANT_DATA[PLANT_DATA['Plant Type'] == "Herbs"]['Name'])
 
 # Calculate threshold values for each plant
 water_levels = ['Minimum demand', 'Low demand', 'Medium demand', 'High demand', 'Very high demand', 'None']
-THRESHOLD = [0.55, 0.4, 0.35, 0.3, 0.25, 0.35]
+THRESHOLD = [0.59, 0.45, 0.32, 0.25, 0.19, 0.32]
 
 # GUI class for inputing plant information
 class GUI():
